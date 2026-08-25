@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLS Handshake Visualizer — Goblin Eaters Cyber Cavern</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0e14;
+  --surface: #111520;
+  --surface2: #161b28;
+  --border: #1e2636;
+  --border2: #263040;
+  --text: #c8d4e8;
+  --dim: #6b7f9e;
+  --faint: #3a4a60;
+  --blue: #4a9eff;
+  --blue-dim: #1e3d6e;
+  --green: #3ecf8e;
+  --green-dim: #0e3024;
+  --red: #ff4d6a;
+  --red-dim: #3d0f18;
+  --amber: #ffb340;
+  --amber-dim: #3d2800;
+  --purple: #b57aff;
+  --purple-dim: #2e1a4d;
+  --bottom-h: 420px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  height: 3.25rem;
+  flex-shrink: 0;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.header-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(.85rem, 1.4vw, .95rem);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.header-sub {
+  font-size: .58rem;
+  color: var(--dim);
+  margin-top: .1rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mode-toggle { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+.mode-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  padding: .35rem .8rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .2s;
+}
+.mode-btn:hover { color: var(--text); border-color: var(--dim); }
+.mode-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.mode-btn.active.atk { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.mode-btn.active.forge { background: var(--purple-dim); border-color: var(--purple); color: var(--purple); }
+
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+canvas { display: block; width: 100%; height: 100%; }
+
+.bottom {
+  height: var(--bottom-h);
+  flex-shrink: 0;
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.dissector {
+  width: 65%;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.dissector-header {
+  height: 2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 .9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.dissector-title {
+  font-size: .72rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+.dissector-badge {
+  font-size: .68rem;
+  padding: .14rem .5rem;
+  border-radius: 3px;
+  letter-spacing: .06em;
+}
+.dissector-badge.normal { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+.dissector-badge.attack { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+.dissector-badge.forge  { background: var(--purple-dim); color: var(--purple); border: 1px solid var(--purple); }
+.dissector-badge.empty  { background: transparent; color: var(--faint); border: 1px solid var(--faint); }
+
+.dissector-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
+
+.frame-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .4rem;
+  color: var(--faint);
+}
+.frame-placeholder .ph-icon { font-size: 1.8rem; opacity: .3; }
+.frame-placeholder .ph-text { font-size: .78rem; letter-spacing: .06em; }
+
+.frame-table-wrap { flex: 1; overflow: auto; padding: .3rem .5rem; }
+
+table.ft { width: 100%; border-collapse: collapse; font-size: .75rem; }
+
+table.ft th {
+  text-align: left;
+  color: var(--dim);
+  font-size: .66rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: .25rem .5rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+table.ft td {
+  padding: .28rem .5rem;
+  border-bottom: 1px solid #151c28;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.ft tr:last-child td { border-bottom: none; }
+
+.ft-section td {
+  font-size: .62rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  padding: .28rem .5rem .12rem;
+  background: var(--bg);
+}
+
+.ft-l5 td { background: rgba(74,158,255,.03); }
+.ft-l6 td { background: rgba(181,122,255,.03); }
+
+.ft .fn { color: var(--dim); width: 9.5rem; }
+.ft .fh { color: var(--faint); width: 6.5rem; font-size: .68rem; }
+.ft .fv { color: var(--text); white-space: normal; }
+.ft .fv2 { color: var(--green); white-space: normal; }
+
+.ft tr.lie .fn::before { content: '⚠ '; color: var(--red); }
+.ft tr.lie .fv { color: var(--red); font-weight: 600; }
+
+.lie-badge {
+  display: inline-block;
+  font-size: .6rem;
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  padding: .04rem .32rem;
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+.truth-badge {
+  display: inline-block;
+  font-size: .6rem;
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 2px;
+  padding: .04rem .32rem;
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+
+.ft-note td {
+  font-size: .68rem;
+  color: var(--amber);
+  padding: .3rem .5rem;
+  border-top: 1px solid var(--border);
+  white-space: normal;
+}
+
+.step-panel {
+  width: 35%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.nav-strip {
+  flex-shrink: 0;
+  padding: .55rem .8rem .45rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.step-counter { font-size: .7rem; color: var(--dim); text-align: center; letter-spacing: .05em; }
+
+.step-dots { display: flex; gap: .18rem; justify-content: center; }
+.dot { flex: 1; max-width: 1.5rem; height: .19rem; border-radius: 2px; background: var(--faint); transition: background .25s; }
+.dot.done      { background: var(--blue); }
+.dot.done.atk  { background: var(--red); }
+.dot.done.forge{ background: var(--purple); }
+.dot.current   { background: var(--amber); }
+
+.nav-btns { display: flex; gap: .35rem; }
+.nbtn {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .75rem;
+  padding: .45rem .2rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .18s;
+  text-align: center;
+}
+.nbtn:hover { border-color: var(--dim); color: var(--blue); }
+.nbtn:disabled { opacity: .25; cursor: not-allowed; }
+.nbtn.primary { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.nbtn.primary:hover { background: rgba(74,158,255,.2); }
+.nbtn.primary.atk { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.nbtn.primary.forge { background: var(--purple-dim); border-color: var(--purple); color: var(--purple); }
+
+.auto-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .73rem;
+  padding: .38rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .18s;
+  width: 100%;
+}
+.auto-btn:hover { color: var(--text); border-color: var(--dim); }
+.auto-btn.running { color: var(--amber); border-color: var(--amber); }
+
+.step-explain {
+  flex: 1;
+  padding: .7rem .9rem;
+  overflow: hidden auto;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.step-explain.empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-size: .78rem;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.step-lbl { font-size: .67rem; text-transform: uppercase; letter-spacing: .09em; margin-bottom: .05rem; }
+.step-lbl.normal { color: var(--blue); }
+.step-lbl.attack { color: var(--red); }
+.step-lbl.warn   { color: var(--amber); }
+.step-lbl.good   { color: var(--green); }
+.step-lbl.forge  { color: var(--purple); }
+
+.step-msg { font-size: .92rem; font-weight: 600; color: var(--text); line-height: 1.4; }
+.step-det { font-size: .78rem; color: var(--dim); line-height: 1.7; flex: 1; }
+
+.session-strip {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: .35rem .9rem;
+  display: none;
+}
+.session-strip.visible { display: block; }
+.session-title { font-size: .66rem; color: var(--faint); text-transform: uppercase; letter-spacing: .09em; margin-bottom: .25rem; }
+.session-row { display: flex; justify-content: space-between; font-size: .74rem; padding: .15rem 0; gap: .4rem; }
+.session-row .sk { color: var(--blue); }
+.session-row .sv { color: var(--green); font-size: .7rem; text-align: right; }
+.session-row.weak .sv { color: var(--red); animation: flash .5s ease; }
+@keyframes flash { 0%,100%{opacity:1} 50%{opacity:.1} }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">TLS Handshake Visualizer</div>
+    <div class="header-sub">Layers 5 &amp; 6 · Session Establishment &amp; Presentation Encryption · Week 8 · Goblin Eaters Cyber Cavern</div>
+  </div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btnNormal" onclick="setMode('normal')">Normal Handshake</button>
+    <button class="mode-btn" id="btnDowngrade" onclick="setMode('downgrade')">Downgrade Attack</button>
+    <button class="mode-btn" id="btnForge" onclick="setMode('forge')">Forged Certificate</button>
+  </div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="bottom">
+
+  <div class="dissector">
+    <div class="dissector-header">
+      <div class="dissector-title" id="dissTitle">TLS Record</div>
+      <div class="dissector-badge empty" id="dissBadge">No record this step</div>
+    </div>
+    <div class="dissector-body" id="dissBody">
+      <div class="frame-placeholder" id="framePlaceholder">
+        <div class="ph-icon">🔒</div>
+        <div class="ph-text">Handshake dissector active on message steps</div>
+      </div>
+      <div class="frame-table-wrap" id="frameTableWrap" style="display:none">
+        <table class="ft" id="frameTable">
+          <thead>
+            <tr>
+              <th class="fn">Field</th>
+              <th class="fh">Layer</th>
+              <th id="thSent">Value</th>
+              <th id="thTruth" style="display:none">Honest Value</th>
+            </tr>
+          </thead>
+          <tbody id="frameTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel">
+    <div class="nav-strip">
+      <div class="step-counter" id="stepCounter">Ready — click Next to begin</div>
+      <div class="step-dots" id="stepDots"></div>
+      <div class="nav-btns">
+        <button class="nbtn" id="btnPrev" onclick="prevStep()" disabled>← Prev</button>
+        <button class="nbtn primary" id="btnNext" onclick="nextStep()">Next →</button>
+        <button class="nbtn" onclick="resetAll()">Reset</button>
+      </div>
+      <button class="auto-btn" id="btnAuto" onclick="toggleAuto()">▶ Auto Play</button>
+    </div>
+
+    <div class="step-explain empty" id="stepExplain">
+      Select a mode above and click Next to begin.
+    </div>
+
+    <div class="session-strip" id="sessionStrip">
+      <div class="session-title">Negotiated Session</div>
+      <div id="sessionRows"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// FRAME DATA — TLS handshake message fields
+// ═══════════════════════════════════════════════════════
+const FRAMES = {
+  clientHello: {
+    title: 'ClientHello — L5 Session Layer', badge: 'normal', badgeText: 'Session Negotiation Begins', showTruth: false,
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Message Type', hex: 'L5', sent: 'ClientHello' },
+      { field: 'Versions Offered', hex: 'L5', sent: 'TLS 1.3, TLS 1.2', note: 'Client proposes the strongest versions it supports, newest first' },
+      { field: 'Cipher Suites Offered', hex: 'L5', sent: 'TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384', note: 'A list, not a single choice — the server picks' },
+      { field: 'Key Share', hex: 'L5', sent: '(ephemeral public key)', note: 'Enables 1-RTT key agreement in TLS 1.3' },
+      { field: 'SNI Extension', hex: 'L5', sent: 'www.example.com', note: 'Sent in cleartext — the destination hostname is visible to any observer on the path' },
+    ]}]
+  },
+  serverHello: {
+    title: 'ServerHello + Certificate — L5 Session Layer', badge: 'normal', badgeText: 'Session Negotiated', showTruth: false,
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Message Type', hex: 'L5', sent: 'ServerHello' },
+      { field: 'Version Chosen', hex: 'L5', sent: 'TLS 1.3', note: 'The strongest version both sides support' },
+      { field: 'Cipher Suite Chosen', hex: 'L5', sent: 'TLS_AES_128_GCM_SHA256' },
+      { field: 'Certificate — Subject', hex: 'L5', sent: 'CN=www.example.com', note: 'The domain the certificate claims to represent' },
+      { field: 'Certificate — Issuer', hex: 'L5', sent: 'Trusted Root CA', note: 'The client verifies this chain, not the server\'s identity directly' },
+      { field: 'Key Share', hex: 'L5', sent: '(ephemeral public key)' },
+    ]}]
+  },
+  finished: {
+    title: 'Finished — Session Established', badge: 'normal', badgeText: 'L5 Complete', showTruth: false,
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Message Type', hex: 'L5', sent: 'Finished (both directions)' },
+      { field: 'Verify Data', hex: 'L5', sent: '(hash of entire handshake)', note: 'Proves both sides saw the same, unmodified handshake — the last L5 checkpoint before encryption begins' },
+    ]}]
+  },
+  encryptedRecord: {
+    title: 'Application Data — L6 Presentation Layer', badge: 'normal', badgeText: 'Encrypted Record', showTruth: false,
+    note: 'This is ordinary application data, HTTP, an API call, anything. The session layer\'s job is done. Everything from here is presentation-layer work: format, then encrypt.',
+    sections: [{ label: 'TLS Record', cls: 'ft-l6', rows: [
+      { field: 'Content Type', hex: 'L6', sent: 'Application Data (23)' },
+      { field: 'Payload', hex: 'L6', sent: '(encrypted — opaque to any observer)', note: 'Confidentiality and integrity are presentation-layer guarantees, not session-layer ones' },
+    ]}]
+  },
+
+  // ── Downgrade attack frames ──
+  clientHelloRetry: {
+    title: 'ClientHello (Forced Retry) — L5', badge: 'attack', badgeText: 'DOWNGRADE IN PROGRESS', showTruth: true,
+    note: 'The client did not choose to weaken its offer. The connection was made to fail until only a legacy fallback remained.',
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Message Type', hex: 'L5', sent: 'ClientHello', truth: 'ClientHello', lie: false },
+      { field: 'Versions Offered', hex: 'L5', sent: 'SSL 3.0 only', truth: 'TLS 1.3, TLS 1.2', lie: true, note: 'FALLBACK — the client\'s browser is retrying with a legacy-only offer after repeated connection failures the attacker engineered' },
+    ]}]
+  },
+  serverHelloWeak: {
+    title: 'ServerHello — Downgraded', badge: 'attack', badgeText: 'WEAK VERSION ACCEPTED', showTruth: true,
+    note: 'SSL 3.0\'s CBC-mode ciphers are what POODLE (2014) exploited. The handshake itself is not forged, only starved down to a version with a known padding-oracle weakness.',
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Version Chosen', hex: 'L5', sent: 'SSL 3.0', truth: 'TLS 1.3', lie: true, note: 'The server honestly supports TLS 1.3. It also still accepts SSL 3.0, which is the only reason the downgrade works.' },
+      { field: 'Cipher Suite Chosen', hex: 'L5', sent: 'CBC-mode block cipher', truth: 'AEAD cipher (TLS_AES_128_GCM_SHA256)', lie: true, note: 'CBC padding is what a POODLE-style oracle attack exploits byte by byte' },
+    ]}]
+  },
+  encryptedRecordWeak: {
+    title: 'Application Data — Weak Encryption', badge: 'attack', badgeText: 'DECRYPTABLE BY ATTACKER', showTruth: true,
+    note: 'The data is technically encrypted. The cipher mode has a padding oracle. An attacker who can force repeated requests through the connection recovers plaintext one byte at a time.',
+    sections: [{ label: 'TLS Record', cls: 'ft-l6', rows: [
+      { field: 'Content Type', hex: 'L6', sent: 'Application Data (23)', truth: 'Application Data (23)', lie: false },
+      { field: 'Payload', hex: 'L6', sent: '(CBC-encrypted, oracle-vulnerable)', truth: '(recovered by attacker via repeated padding queries)', lie: true, note: 'This is what POODLE actually does: not breaking the cipher\'s math, exploiting how errors leak information about padding' },
+    ]}]
+  },
+
+  // ── Forged certificate attack frames ──
+  serverHelloForged: {
+    title: 'ServerHello + Certificate — Forged', badge: 'forge', badgeText: 'FORGED CERTIFICATE', showTruth: true,
+    note: 'The client validates the chain, not the server. If the issuing CA is compromised, a forged certificate for the correct domain name passes every check the client is capable of running.',
+    sections: [{ label: 'Handshake Message', cls: 'ft-l5', rows: [
+      { field: 'Version Chosen', hex: 'L5', sent: 'TLS 1.3', truth: 'TLS 1.3', lie: false },
+      { field: 'Certificate — Subject', hex: 'L5', sent: 'CN=www.example.com', truth: 'CN=www.example.com', lie: false, note: 'Correct — this is exactly what makes the forgery convincing. The domain name is not the lie.' },
+      { field: 'Certificate — Issuer', hex: 'L5', sent: 'Compromised CA (trusted root)', truth: 'Attacker-controlled certificate, fraudulently issued', lie: true, note: 'LIE — the signing authority itself was compromised, the way DigiNotar was in 2011. The client has no way to detect this from the certificate alone.' },
+    ]}]
+  },
+  chainValidated: {
+    title: 'Certificate Chain — Client Validation', badge: 'forge', badgeText: 'CHAIN RESOLVES', showTruth: false,
+    note: 'The client\'s browser walks the chain to a root it already trusts and stops there. It never independently confirms the server\'s real identity, only that a CA it trusts vouched for this certificate.',
+    sections: [{ label: 'Trust Chain', cls: 'ft-l5', rows: [
+      { field: 'Leaf Certificate', hex: 'L5', sent: 'CN=www.example.com' },
+      { field: 'Issuing CA', hex: 'L5', sent: 'Compromised CA' },
+      { field: 'Root CA', hex: 'L5', sent: 'Present in client trust store', note: 'This is the only check that runs. The chain is cryptographically valid — it was signed by a real CA key. That the CA itself was compromised is invisible here.' },
+    ]}]
+  },
+  encryptedRecordMITM: {
+    title: 'Application Data — Attacker In The Middle', badge: 'forge', badgeText: 'MITM ESTABLISHED', showTruth: true,
+    note: 'Two separate, legitimate-looking TLS sessions now exist: client-to-attacker, and attacker-to-real-server. The attacker decrypts, reads or modifies, then re-encrypts before forwarding. Neither side sees anything wrong.',
+    sections: [{ label: 'TLS Record', cls: 'ft-l6', rows: [
+      { field: 'Content Type', hex: 'L6', sent: 'Application Data (23)', truth: 'Application Data (23)', lie: false },
+      { field: 'Payload', hex: 'L6', sent: '(encrypted to attacker\'s session key)', truth: '(read/modified in cleartext at the attacker, then re-encrypted)', lie: true, note: 'The client\'s connection is genuinely encrypted end-to-end. It just doesn\'t end at the party the client thinks it does.' },
+    ]}]
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// STEPS
+// ═══════════════════════════════════════════════════════
+const normalSteps = [
+  { layer: 'L5', from: 'clientL5', to: 'serverL5', packet: { color: '#4a9eff', label: 'CH' }, frame: 'clientHello',
+    log: { type: 'normal', lbl: 'ClientHello — L5 Session Layer',
+      msg: 'Client proposes protocol versions and cipher suites',
+      det: 'This is session-layer work: establishing the terms of a new session. Nothing is encrypted yet. The client is asking, not telling — the server chooses from what\'s offered.' } },
+  { layer: 'L5', from: 'serverL5', to: 'clientL5', packet: { color: '#4a9eff', label: 'SH' }, frame: 'serverHello',
+    log: { type: 'good', lbl: 'ServerHello + Certificate — L5',
+      msg: 'Server picks a version and cipher suite, presents its certificate',
+      det: 'The server\'s certificate is the wax seal: a claim of identity backed by a certificate authority\'s signature. The client is about to trust that chain, not the server directly.' } },
+  { layer: 'L5', from: null, to: null, frame: null, session: [{ k: 'Chain Validation', v: 'Resolves to trusted root ✓', weak: false }],
+    log: { type: 'good', lbl: 'Certificate Chain Validated',
+      msg: 'Client walks the chain to a root it already trusts',
+      det: 'This check confirms a trusted CA signed this certificate. It does not, and cannot, independently confirm the server is who it claims to be beyond that signature.' } },
+  { layer: 'L5', from: 'clientL5', to: 'serverL5', packet: { color: '#3ecf8e', label: 'FIN' }, frame: 'finished',
+    log: { type: 'good', lbl: 'Finished — Session Established',
+      msg: 'Both sides confirm they saw the same handshake',
+      det: 'The Finished messages are a hash of the entire handshake so far. If anyone tampered with earlier messages, this check fails. L5\'s job — establishing an authenticated session — is now complete.' } },
+  { layer: 'rise', from: 'clientL5', to: 'clientL6', packet: null, frame: null,
+    log: { type: 'normal', lbl: 'Handing Off To L6',
+      msg: 'Same connection, same session — a different job begins',
+      det: 'Nothing new was negotiated here. The session layer finished establishing who is talking and on what terms. The presentation layer now takes that session and starts formatting and encrypting whatever the application sends.' } },
+  { layer: 'L6', from: 'clientL6', to: 'serverL6', packet: { color: '#b57aff', label: '🔒' }, frame: 'encryptedRecord',
+    log: { type: 'good', lbl: 'Application Data — L6 Presentation Layer',
+      msg: 'Encrypted records now carry whatever the application sends',
+      det: 'This could be HTTP, an API call, anything above. The presentation layer\'s job is confidentiality and integrity, using the session L5 just established. No further handshake needed until this session expires.' } },
+];
+
+const downgradeSteps = [
+  { layer: 'L5', from: 'clientL5', to: 'serverL5', packet: { color: '#4a9eff', label: 'CH' }, frame: 'clientHello',
+    log: { type: 'normal', lbl: 'ClientHello — Modern Versions Offered',
+      msg: 'Client proposes TLS 1.3 and TLS 1.2, as it normally would',
+      det: 'Nothing unusual yet. The client is behaving exactly as a modern client should.' } },
+  { layer: 'L5', from: 'attacker', to: 'clientL5', packet: { color: '#ff4d6a', label: 'RST' }, frame: null, attackerVisible: true,
+    log: { type: 'attack', lbl: 'Attacker Forces Connection Failure',
+      msg: 'The attacker, sitting on-path, blocks or resets the negotiation',
+      det: 'This is the core POODLE-era technique: the attacker doesn\'t need to break any cryptography here. Repeatedly forcing the connection to fail trains the client\'s retry logic to fall back to something older and weaker.' } },
+  { layer: 'L5', from: 'clientL5', to: 'serverL5', packet: { color: '#ff4d6a', label: 'CH' }, frame: 'clientHelloRetry',
+    log: { type: 'warn', lbl: 'Client Retries — Legacy Fallback Only',
+      msg: 'After repeated failures, the client offers only SSL 3.0',
+      det: 'This is not a client choosing weak security. It is a client trying to get any connection to succeed, and legacy fallback behavior existing for compatibility with old servers being weaponized against it.' } },
+  { layer: 'L5', from: 'serverL5', to: 'clientL5', packet: { color: '#ff4d6a', label: 'SH' }, frame: 'serverHelloWeak',
+    log: { type: 'attack', lbl: 'Server Accepts SSL 3.0',
+      msg: 'A CBC-mode legacy cipher suite is negotiated',
+      det: 'The server did nothing malicious. It simply still supports SSL 3.0 for compatibility, and that support is precisely the vulnerability. This is what POODLE (2014) targeted.' } },
+  { layer: 'rise', from: 'clientL5', to: 'clientL6', packet: null, frame: null,
+    log: { type: 'warn', lbl: 'Handing Off To L6 — Weakened',
+      msg: 'A session exists, but it was built on a downgraded foundation',
+      det: 'The handshake completed. It just completed on terms an attacker engineered, not terms either endpoint would have chosen on its own.' } },
+  { layer: 'L6', from: 'clientL6', to: 'serverL6', packet: { color: '#ff4d6a', label: '🔓' }, frame: 'encryptedRecordWeak',
+    log: { type: 'attack', lbl: 'Padding Oracle Exploited',
+      msg: 'Attacker recovers plaintext byte by byte',
+      det: 'The data is technically encrypted the entire time. The attack works by observing how the server responds to specially crafted, malformed ciphertext, not by breaking the cipher\'s key. Confidentiality fails without the key ever being cracked.' } },
+];
+
+const forgeSteps = [
+  { layer: 'L5', from: 'clientL5', to: 'serverL5', packet: { color: '#4a9eff', label: 'CH' }, frame: 'clientHello',
+    log: { type: 'normal', lbl: 'ClientHello — Sent Toward the Real Server',
+      msg: 'Client begins a handshake, addressed to the legitimate server',
+      det: 'From the client\'s perspective, this looks like any other connection attempt.' } },
+  { layer: 'L5', from: null, to: null, packet: null, frame: null, attackerVisible: true,
+    log: { type: 'forge', lbl: 'Attacker Positioned On-Path',
+      msg: 'Traffic is intercepted before it reaches the real server',
+      det: 'This could happen via ARP poisoning, a rogue Wi-Fi access point, or a compromised router — the interception mechanism is a Week 2 or Week 4 problem. What matters this week is what the attacker does with the position once they have it.' } },
+  { layer: 'L5', from: 'attacker', to: 'clientL5', packet: { color: '#b57aff', label: 'SH*' }, frame: 'serverHelloForged',
+    log: { type: 'forge', lbl: 'Forged Certificate Presented',
+      msg: 'Attacker answers as if they were the real server',
+      det: 'The certificate\'s subject name is correct. Only its issuance is fraudulent — it was signed using a certificate authority\'s compromised infrastructure, the way DigiNotar\'s was in 2011.' } },
+  { layer: 'L5', from: null, to: null, frame: 'chainValidated', session: [{ k: 'Chain Validation', v: 'Resolves to trusted root ✓ (falsely)', weak: true }],
+    log: { type: 'warn', lbl: 'Client Trusts the Chain, Not the Server',
+      msg: 'Validation passes — the signature is genuine, the signer was compromised',
+      det: 'This is the structural weakness, not a bug. The client was only ever designed to verify that a trusted CA vouched for this certificate. It has no independent way to confirm the CA itself wasn\'t compromised when it did so.' } },
+  { layer: 'rise', from: 'clientL5', to: 'clientL6', packet: null, frame: null,
+    log: { type: 'forge', lbl: 'Handing Off To L6 — With the Wrong Party',
+      msg: 'A session is established. It is established with the attacker.',
+      det: 'Every check the protocol runs has passed. The session layer did its job correctly, using false information it had no way to detect as false.' } },
+  { layer: 'L6', from: 'clientL6', to: 'serverL6', packet: { color: '#b57aff', label: '🔒' }, frame: 'encryptedRecordMITM',
+    log: { type: 'forge', lbl: 'Encrypted — To The Wrong Endpoint',
+      msg: 'Attacker relays traffic to the real server, reading everything in between',
+      det: 'Two genuinely encrypted sessions now exist end to end: client-to-attacker, and attacker-to-real-server. Encryption worked exactly as designed. It just didn\'t protect against a false identity claim at the layer below it.' } },
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let mode = 'normal';
+let steps = normalSteps;
+let currentStep = -1;
+let autoTimer = null;
+let packets = [];
+let rings = [];
+let replayTimer = null;
+let replaySpec = null;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// L5 band (session/handshake) sits BELOW L6 band (presentation/encryption),
+// mirroring the OSI stack's own bottom-to-top layer order.
+const L6_Y = .24;  // presentation layer, upper band
+const L5_Y = .74;  // session layer, lower band
+const DIVIDER_Y = .49;
+
+const nodes = {
+  clientL6:   { label: 'Client',  sub: 'L6 · Presentation', col: '#b57aff', rx: .15, ry: L6_Y },
+  clientL5:   { label: 'Client',  sub: 'L5 · Session',      col: '#4a9eff', rx: .15, ry: L5_Y },
+  serverL6:   { label: 'Server',  sub: 'L6 · Presentation', col: '#b57aff', rx: .85, ry: L6_Y },
+  serverL5:   { label: 'Server',  sub: 'L5 · Session',       col: '#4a9eff', rx: .85, ry: L5_Y },
+  attacker:   { label: 'Attacker',sub: 'On-Path',            col: '#ff4d6a', rx: .5,  ry: L5_Y, hidden: true },
+};
+
+// ═══════════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════════
+function resize() {
+  const wrap = canvas.parentElement;
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+
+function gp(key) {
+  const n = nodes[key];
+  return { x: n.rx * canvas.width, y: n.ry * canvas.height };
+}
+
+function drawGrid() {
+  ctx.save();
+  ctx.strokeStyle = '#0e1219';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+  for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawBands() {
+  ctx.save();
+  const dividerY = DIVIDER_Y * canvas.height;
+  ctx.strokeStyle = '#1a2233';
+  ctx.setLineDash([6, 5]);
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, dividerY); ctx.lineTo(canvas.width, dividerY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = `700 10px 'JetBrains Mono'`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(181,122,255,.5)';
+  ctx.fillText('L6 · PRESENTATION LAYER — ENCRYPTION', 16, 22);
+  ctx.fillStyle = 'rgba(74,158,255,.5)';
+  ctx.fillText('L5 · SESSION LAYER — HANDSHAKE', 16, dividerY + 20);
+  ctx.restore();
+}
+
+function drawLink(ak, bk, active, color, dashed) {
+  const a = gp(ak), b = gp(bk);
+  ctx.save();
+  ctx.strokeStyle = active ? color : '#1a2030';
+  ctx.lineWidth = active ? 2 : 1;
+  if (dashed) ctx.setLineDash([5, 4]);
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.restore();
+}
+
+function drawVerticalTether(topKey, botKey) {
+  // faint connector showing "same host, two layers of work"
+  drawLink(topKey, botKey, false, '', true);
+}
+
+function drawNode(key) {
+  const n = nodes[key];
+  if (n.hidden && !(key === 'attacker' && attackerActiveThisStep())) return;
+
+  const { x, y } = gp(key);
+  const step = currentStep >= 0 ? steps[currentStep] : null;
+  const active = step && (step.from === key || step.to === key);
+  const r = 24;
+
+  ctx.save();
+  if (active) {
+    const g = ctx.createRadialGradient(x, y, r, x, y, r * 3);
+    g.addColorStop(0, n.col + '30'); g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = '#13182a';
+  ctx.strokeStyle = active ? n.col : '#20304a';
+  ctx.lineWidth = active ? 2 : 1;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 6;
+    const px = x + r * Math.cos(a), py = y + r * Math.sin(a);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = active ? n.col : '#2a3a50';
+  ctx.beginPath(); ctx.arc(x, y - 5, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x - 8, y + 1, 16, 3);
+  ctx.fillRect(x - 10, y + 6, 20, 2);
+
+  ctx.fillStyle = active ? n.col : '#5a6a80';
+  ctx.font = `600 11px 'JetBrains Mono'`;
+  ctx.textAlign = 'center';
+  ctx.fillText(n.label, x, y + r + 15);
+  ctx.fillStyle = '#3a4a60';
+  ctx.font = `400 9px 'JetBrains Mono'`;
+  ctx.fillText(n.sub, x, y + r + 27);
+  ctx.restore();
+}
+
+function attackerActiveThisStep() {
+  const step = currentStep >= 0 ? steps[currentStep] : null;
+  if (!step) return false;
+  if (mode === 'normal') return false;
+  if (step.attackerVisible) return true;
+  // stays visible for remainder of an attack mode once introduced
+  for (let i = 0; i <= currentStep; i++) if (steps[i].attackerVisible) return true;
+  return false;
+}
+
+function updatePackets() {
+  packets = packets.filter(p => !p.done);
+  packets.forEach(p => { p.t = Math.min(1, p.t + .022); if (p.t >= 1) p.done = true; });
+}
+
+function drawPackets() {
+  packets.forEach(p => {
+    const x = p.fx + (p.tx - p.fx) * p.t;
+    const y = p.fy + (p.ty - p.fy) * p.t;
+    ctx.save();
+    ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0b0e14';
+    ctx.font = `bold 7px 'JetBrains Mono'`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.label, x, y);
+    ctx.restore();
+  });
+}
+
+function updateRings() {
+  rings = rings.filter(r => r.alpha > 0);
+  rings.forEach(r => { r.radius += 2.2; r.alpha = Math.max(0, 1 - (r.radius - 20) / 70); });
+}
+
+function drawRings() {
+  rings.forEach(r => {
+    ctx.save();
+    ctx.strokeStyle = r.color;
+    ctx.globalAlpha = r.alpha * .55;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function spawnPacket(fk, tk, color, label, delay) {
+  const f = gp(fk), t = gp(tk);
+  setTimeout(() => packets.push({ fx: f.x, fy: f.y, tx: t.x, ty: t.y, color, label, t: 0, done: false }), delay || 0);
+}
+
+function spawnRing(fk, color, delay) {
+  const p = gp(fk);
+  setTimeout(() => rings.push({ x: p.x, y: p.y, radius: 20, color, alpha: 1 }), delay || 0);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGrid();
+  drawBands();
+
+  drawVerticalTether('clientL6', 'clientL5');
+  drawVerticalTether('serverL6', 'serverL5');
+
+  const step = currentStep >= 0 ? steps[currentStep] : null;
+
+  if (step) {
+    let ac = '#4a9eff';
+    if (step.log && step.log.type === 'attack') ac = '#ff4d6a';
+    else if (step.log && step.log.type === 'forge') ac = '#b57aff';
+    else if (step.log && step.log.type === 'warn') ac = '#ffb340';
+
+    if (step.layer === 'rise') {
+      drawLink(step.from, step.to, true, ac, true);
+    } else if (step.from && step.to) {
+      drawLink(step.from, step.to, true, ac, mode !== 'normal' && step.log && (step.log.type === 'attack' || step.log.type === 'forge'));
+    }
+  }
+
+  drawRings();
+  drawPackets();
+  Object.keys(nodes).forEach(k => drawNode(k));
+}
+
+let rafId;
+function loop() { updatePackets(); updateRings(); draw(); rafId = requestAnimationFrame(loop); }
+
+// ═══════════════════════════════════════════════════════
+// FRAME DISSECTOR
+// ═══════════════════════════════════════════════════════
+function showFrame(key) {
+  const placeholder = document.getElementById('framePlaceholder');
+  const tableWrap = document.getElementById('frameTableWrap');
+  const badge = document.getElementById('dissBadge');
+  const title = document.getElementById('dissTitle');
+
+  if (!key) {
+    placeholder.style.display = 'flex';
+    tableWrap.style.display = 'none';
+    title.textContent = 'TLS Record';
+    badge.textContent = 'No record this step';
+    badge.className = 'dissector-badge empty';
+    return;
+  }
+
+  const f = FRAMES[key];
+  if (!f) return;
+
+  placeholder.style.display = 'none';
+  tableWrap.style.display = 'block';
+  title.textContent = f.title;
+  badge.textContent = f.badgeText;
+  badge.className = 'dissector-badge ' + f.badge;
+
+  document.getElementById('thTruth').style.display = f.showTruth ? '' : 'none';
+  document.getElementById('thSent').textContent = f.showTruth ? 'Sent Value' : 'Value';
+
+  const tbody = document.getElementById('frameTbody');
+  tbody.innerHTML = '';
+
+  f.sections.forEach(sec => {
+    const lr = document.createElement('tr');
+    lr.className = 'ft-section';
+    lr.innerHTML = `<td colspan="4">${sec.label}</td>`;
+    tbody.appendChild(lr);
+
+    sec.rows.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.className = sec.cls + (row.lie ? ' lie' : '');
+      const lieBadge = row.lie ? `<span class="lie-badge">FALSIFIED</span>` : '';
+      let truthCell = '';
+      if (f.showTruth) {
+        truthCell = row.lie
+          ? `<td class="fv2">${row.truth}<span class="truth-badge">HONEST</span></td>`
+          : `<td class="fv2" style="color:var(--faint)">—</td>`;
+      }
+      tr.innerHTML = `<td class="fn">${row.field}</td><td class="fh">${row.hex}</td><td class="fv">${row.sent}${lieBadge}</td>${truthCell}`;
+      if (row.note) tr.title = row.note;
+      tbody.appendChild(tr);
+    });
+  });
+
+  if (f.note) {
+    const nr = document.createElement('tr');
+    nr.className = 'ft-note';
+    nr.innerHTML = `<td colspan="4">⚠ ${f.note}</td>`;
+    tbody.appendChild(nr);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP EXPLAIN
+// ═══════════════════════════════════════════════════════
+function showStep(s) {
+  const el = document.getElementById('stepExplain');
+  if (!s) {
+    el.className = 'step-explain empty';
+    el.innerHTML = 'Select a mode above and click Next to begin.';
+    return;
+  }
+  el.className = 'step-explain';
+  el.innerHTML = `
+    <div class="step-lbl ${s.log.type}">${s.log.lbl}</div>
+    <div class="step-msg">${s.log.msg}</div>
+    <div class="step-det">${s.log.det}</div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// SESSION STRIP
+// ═══════════════════════════════════════════════════════
+function updateSession(entries) {
+  const strip = document.getElementById('sessionStrip');
+  const rows = document.getElementById('sessionRows');
+  if (!entries || !entries.length) { strip.classList.remove('visible'); rows.innerHTML = ''; return; }
+  strip.classList.add('visible');
+  rows.innerHTML = entries.map(e =>
+    `<div class="session-row${e.weak ? ' weak' : ''}"><span class="sk">${e.k}</span><span class="sv">${e.v}</span></div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP ENGINE
+// ═══════════════════════════════════════════════════════
+const REPLAY_INTERVAL = 3000;
+
+function firePackets(s) {
+  if (s.layer === 'rise') {
+    spawnPacket(s.from, s.to, '#b57aff', '↑', 80);
+    spawnRing(s.from, '#b57aff', 60);
+    spawnRing(s.to, '#b57aff', 500);
+    return;
+  }
+  if (s.packet && s.from && s.to) {
+    spawnPacket(s.from, s.to, s.packet.color, s.packet.label, 80);
+  }
+}
+
+function stopReplay() {
+  if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+  replaySpec = null;
+}
+
+function startReplay(s) {
+  stopReplay();
+  if (!s.packet && s.layer !== 'rise') return;
+  replaySpec = s;
+  firePackets(s);
+  replayTimer = setInterval(() => { packets = []; rings = []; firePackets(replaySpec); }, REPLAY_INTERVAL);
+}
+
+function applyStep(s) {
+  showStep(s);
+  if (s.hasOwnProperty('frame')) showFrame(s.frame);
+  if (s.session) setTimeout(() => updateSession(s.session), 200);
+  startReplay(s);
+}
+
+function replayTo(target) {
+  packets = []; rings = [];
+  updateSession([]);
+  showStep(null);
+  showFrame(null);
+
+  let lastFrameKey = null;
+  for (let i = 0; i <= target; i++) {
+    const s = steps[i];
+    if (s.hasOwnProperty('frame')) lastFrameKey = s.frame;
+    if (s.session) updateSession(s.session);
+  }
+  showStep(steps[target]);
+  showFrame(lastFrameKey);
+}
+
+function nextStep() {
+  if (currentStep >= steps.length - 1) return;
+  currentStep++;
+  applyStep(steps[currentStep]);
+  updateUI();
+}
+
+function prevStep() {
+  if (currentStep < 0) return;
+  currentStep--;
+  if (currentStep < 0) {
+    stopReplay(); packets = []; rings = [];
+    updateSession([]); showStep(null); showFrame(null);
+  } else {
+    replayTo(currentStep);
+    startReplay(steps[currentStep]);
+  }
+  updateUI();
+}
+
+function resetAll() {
+  currentStep = -1;
+  stopReplay(); packets = []; rings = [];
+  updateSession([]); showStep(null); showFrame(null);
+  updateUI();
+  if (autoTimer) toggleAuto();
+}
+
+function updateUI() {
+  const total = steps.length;
+  const dotClass = mode === 'normal' ? '' : (mode === 'downgrade' ? ' atk' : ' forge');
+
+  document.getElementById('stepCounter').textContent =
+    currentStep < 0 ? 'Ready — click Next to begin' : `Step ${currentStep + 1} of ${total}`;
+
+  document.getElementById('btnPrev').disabled = currentStep < 0;
+  document.getElementById('btnNext').disabled = currentStep >= total - 1;
+  const nb = document.getElementById('btnNext');
+  nb.classList.remove('atk', 'forge');
+  if (mode === 'downgrade') nb.classList.add('atk');
+  if (mode === 'forge') nb.classList.add('forge');
+
+  const bar = document.getElementById('stepDots');
+  bar.innerHTML = steps.map((_, i) => {
+    let c = 'dot';
+    if (i < currentStep) c += ' done' + dotClass;
+    else if (i === currentStep) c += ' current';
+    return `<div class="${c}"></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// MODE + AUTO
+// ═══════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  steps = m === 'normal' ? normalSteps : (m === 'downgrade' ? downgradeSteps : forgeSteps);
+  document.getElementById('btnNormal').className = 'mode-btn' + (m === 'normal' ? ' active' : '');
+  document.getElementById('btnDowngrade').className = 'mode-btn' + (m === 'downgrade' ? ' active atk' : '');
+  document.getElementById('btnForge').className = 'mode-btn' + (m === 'forge' ? ' active forge' : '');
+  resetAll();
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('btnAuto');
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    btn.textContent = '▶ Auto Play'; btn.classList.remove('running');
+  } else {
+    btn.textContent = '⏸ Pause'; btn.classList.add('running');
+    autoTimer = setInterval(() => {
+      if (currentStep >= steps.length - 1) { toggleAuto(); return; }
+      nextStep();
+    }, 2600);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resize);
+resize();
+showFrame(null);
+showStep(null);
+loop();
+updateUI();
+</script>
+</body>
+</html>
